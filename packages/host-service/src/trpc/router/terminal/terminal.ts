@@ -17,35 +17,19 @@ import {
 } from "../../../terminal/terminal";
 import type { HostServiceContext } from "../../../types";
 import { protectedProcedure, router } from "../../index";
+import { toTerminalSessionError } from "./errors";
 
-function toTerminalIoError(message: string): TRPCError {
-	if (message.includes("belong")) {
-		return new TRPCError({ code: "FORBIDDEN", message });
-	}
-	// A worktree deleted underneath an open terminal is a routine lifecycle
-	// state, not a bug — the runtime reports it as a plain string, so match
-	// the stable prefix here to keep it out of Sentry.
-	if (message.startsWith("Workspace worktree no longer exists")) {
-		return new TRPCError({
-			code: "NOT_FOUND",
-			message,
-			cause: { kind: "WORKTREE_GONE" },
-		});
-	}
-	if (
-		message.includes("not found") ||
-		message.includes("not active") ||
-		message.includes("exited")
-	) {
-		return new TRPCError({ code: "NOT_FOUND", message });
-	}
-	return new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
-}
-
-const createSessionInputSchema = z.object({
+export const createSessionInputSchema = z.object({
 	workspaceId: z.string(),
 	terminalId: z.string().optional(),
-	initialCommand: z.string().trim().min(1).optional(),
+	// An empty or whitespace-only command means "open a shell with no initial
+	// command" (e.g. a preset with no command), so normalize it to absent
+	// instead of rejecting. `launchSession` still requires a non-empty command.
+	initialCommand: z
+		.string()
+		.trim()
+		.optional()
+		.transform((value) => (value ? value : undefined)),
 	cwd: z.string().optional(),
 	themeType: z.string().optional(),
 	cols: z.number().int().positive().optional(),
@@ -73,10 +57,7 @@ async function createTerminalSessionFromInput({
 	});
 
 	if ("error" in result) {
-		throw new TRPCError({
-			code: "INTERNAL_SERVER_ERROR",
-			message: result.error,
-		});
+		throw toTerminalSessionError(result);
 	}
 
 	return {
@@ -180,10 +161,7 @@ export const terminalRouter = router({
 		.mutation(({ input }) => {
 			const result = writeInputToSession(input);
 			if ("error" in result) {
-				throw new TRPCError({
-					code: "NOT_FOUND",
-					message: result.error,
-				});
+				throw toTerminalSessionError(result);
 			}
 			return { success: true as const };
 		}),
@@ -207,7 +185,7 @@ export const terminalRouter = router({
 				eventBus: ctx.eventBus,
 			});
 			if ("error" in result) {
-				throw toTerminalIoError(result.error);
+				throw toTerminalSessionError(result);
 			}
 			return { terminalId: input.terminalId, submitted: input.submit };
 		}),
@@ -229,7 +207,7 @@ export const terminalRouter = router({
 				eventBus: ctx.eventBus,
 			});
 			if ("error" in result) {
-				throw toTerminalIoError(result.error);
+				throw toTerminalSessionError(result);
 			}
 			const { success: _success, ...snapshot } = result;
 			return { terminalId: input.terminalId, ...snapshot };
@@ -272,8 +250,12 @@ export const terminalRouter = router({
 				});
 			}
 
+			// Mark the binding disposed BEFORE the kill: the SIGHUP death-gasp and
+			// pty-exit events that follow would otherwise stamp it
+			// "terminal-exited" and auto-resume would resurrect a deliberately
+			// killed session at the next pane mount.
+			ctx.terminalAgentStore.markTerminalDisposed(input.terminalId);
 			await disposeSessionAndWait(input.terminalId, ctx.db);
-			ctx.terminalAgentStore.markTerminalExited(input.terminalId);
 			return { terminalId: input.terminalId, status: "disposed" as const };
 		}),
 

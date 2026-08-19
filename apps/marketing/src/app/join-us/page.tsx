@@ -56,7 +56,7 @@ export default function JoinUsPage() {
 						>
 							<p>
 								Today, tens of thousands of engineers run Superset as their
-								primary IDE, at companies like Vercel, Exa, and Ramp. Soon,
+								primary IDE, at companies like Wix, DoorDash, and Netflix. Soon,
 								teams will run 100s of agents in parallel - software factories
 								that autonomously manufacture and ship code. We're making
 								Superset the place where teams run and manage those factories,
@@ -81,7 +81,7 @@ export default function JoinUsPage() {
 						Open roles
 					</h2>
 
-					{/* Managed via YC Work at a Startup — layout/colors configured at bookface.ycombinator.com/workatastartup/job_board_settings */}
+					{/* Managed via YC Work at a Startup; layout/colors configured at bookface.ycombinator.com/workatastartup/job_board_settings */}
 					<style>{`
 						waas-job-board {
 							--waas-primary: var(--brand);

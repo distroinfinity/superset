@@ -3,7 +3,6 @@ import {
 	automationRuns,
 	automations,
 	chatSessions,
-	devicePresence,
 	githubPullRequests,
 	githubRepositories,
 	integrationConnections,
@@ -101,19 +100,10 @@ export function buildWhereClause(
 		}
 
 		case "auth.users": {
-			const fragment = `"organization_ids" @> ARRAY[$1::uuid]`;
+			const fragment = `"organization_ids" @> ARRAY[$1::uuid] AND "deletion_requested_at" IS NULL`;
 			return { fragment, params: [organizationId] };
 		}
 
-		case "device_presence":
-			return build(
-				devicePresence,
-				devicePresence.organizationId,
-				organizationId,
-			);
-
-		// Synced only by pre-PR1 desktop builds; the app-side feature is
-		// deleted. Drop from the allowlist in PR 2 once adoption drains.
 		case "agent_commands":
 			return build(agentCommands, agentCommands.organizationId, organizationId);
 
