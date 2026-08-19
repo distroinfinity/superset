@@ -164,10 +164,13 @@ function findExistingWorkspaceByBranch(
 			where: and(
 				eq(workspaces.projectId, projectId),
 				eq(workspaces.branch, branch),
-				// Workspace deletes archive the row instead of removing it, so
-				// a tombstone must not satisfy idempotency — its worktree is
-				// gone, and re-creating on the same branch inserts a fresh
-				// live row alongside it (#6383).
+				// Deletes tombstone the row instead of removing it, so a
+				// tombstone must not satisfy idempotency: matching one returns
+				// the archived row with `alreadyExists: true` and silently
+				// skips the create — no worktree, nothing in the sidebar. Its
+				// worktree is gone, so re-creating on the same branch inserts a
+				// fresh live row alongside it. The adopt path already filters
+				// these (#6383).
 				isNull(workspaces.archivedAt),
 			),
 		})
